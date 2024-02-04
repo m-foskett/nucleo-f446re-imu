@@ -53,6 +53,8 @@ static const uint8_t IMU_ADDR = 0x68 << 1;
 static const uint8_t REG_ACCEL_X_H = 0x3B;
 // PWR_MGMT_1 register
 static const uint8_t REG_PWR_MGMT_1 = 0x6B;
+// WHO_AM_I register for the MPU6050
+static const uint8_t WHO_AM_I = 0x75;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -66,6 +68,21 @@ static void MX_I2C1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void MPU6050_Init(void){
+	uint8_t who;
+	uint8_t data;
+	// Check if the MPU-6050 sensor is working by reading the WHO_AM_I register (0x75)
+	//	- Expected Result: 0x68 (104)
+	HAL_I2C_Mem_Read(&hi2c1, IMU_ADDR, WHO_AM_I, 1, &who, 1, HAL_MAX_DELAY);
+	// If the device is available and working
+	if(who == 0x75){
+		// Wakeup the MPU-6050 IMU by writing 0 to the Power Management Register
+		data = 0;
+		HAL_I2C_Mem_Write(&hi2c1, IMU_ADDR, REG_PWR_MGMT_1, 1, &data, 1, HAL_MAX_DELAY);
+	}
+
+}
 
 /* USER CODE END 0 */
 
@@ -88,17 +105,19 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
+
+
   // Wakeup the MPU-6050 IMU
-  buf[0] = REG_PWR_MGMT_1;
-  ret = HAL_I2C_Master_Transmit(&hi2c1, IMU_ADDR, buf, 1, HAL_MAX_DELAY);
-  if(ret != HAL_OK) {
-	  strcpy((char*)buf, "Error Waking up!\r\n");
-  }
-  else {
+//  buf[0] = REG_PWR_MGMT_1;
+//  ret = HAL_I2C_Master_Transmit(&hi2c1, IMU_ADDR, buf, 1, HAL_MAX_DELAY);
+//  if(ret != HAL_OK) {
+//	  strcpy((char*)buf, "Error Waking up!\r\n");
+//  }
+//  else {
 	   // Write zero
-	  buf[0] = 0x00;
-	  ret = HAL_I2C_Master_Transmit(&hi2c1, IMU_ADDR, buf, 1, HAL_MAX_DELAY);
-  }
+//	  buf[0] = 0x00;
+//	  ret = HAL_I2C_Master_Transmit(&hi2c1, IMU_ADDR, buf, 1, HAL_MAX_DELAY);
+//  }
   /* USER CODE END Init */
 
   /* Configure the system clock */
