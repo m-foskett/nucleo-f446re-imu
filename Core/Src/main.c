@@ -27,6 +27,14 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef struct {
+	float accel_x;
+	float accel_y;
+	float accel_z;
+	float gyro_x;
+	float gyro_y;
+	float gyro_z;
+} MPU6050_Values;
 
 /* USER CODE END PTD */
 
@@ -49,12 +57,20 @@ UART_HandleTypeDef huart2;
 // Address of the MPU-6050 IMU
 // Might need to be left shifted by 1
 static const uint8_t IMU_ADDR = 0x68 << 1;
-// Address of the Acceleromter X Output High Byte (ACCEL_XOUT_H)
-static const uint8_t REG_ACCEL_X_H = 0x3B;
-// PWR_MGMT_1 register
+// PWR_MGMT_1 Register
 static const uint8_t REG_PWR_MGMT_1 = 0x6B;
 // WHO_AM_I register for the MPU6050
-static const uint8_t WHO_AM_I = 0x75;
+static const uint8_t REG_WHO_AM_I = 0x75;
+// Sample Rate Divider Register
+static const uint8_t REG_SMPRT_DIV = 0x19;
+// Gyroscope Configuration Register
+static const uint8_t REG_GYRO_CONFIG = 0x1B;
+// Accelerometer Configuration Register
+static const uint8_t REG_ACCEL_CONFIG = 0x1C;
+// Accelerometer Measurement Register
+static const uint8_t REG_ACCEL_XOUT_H = 0x3B;
+// Gyroscope Measurement Register
+static const uint8_t REG_GYRO_XOUT_H = 0x43;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -69,19 +85,107 @@ static void MX_I2C1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void MPU6050_Init(void){
+void MPU6050_Init(uint8_t *buf){
 	uint8_t who;
 	uint8_t data;
+	HAL_StatusTypeDef ret; // Error Status Struct
 	// Check if the MPU-6050 sensor is working by reading the WHO_AM_I register (0x75)
 	//	- Expected Result: 0x68 (104)
-	HAL_I2C_Mem_Read(&hi2c1, IMU_ADDR, WHO_AM_I, 1, &who, 1, HAL_MAX_DELAY);
+	ret = HAL_I2C_Mem_Read(&hi2c1, IMU_ADDR, REG_WHO_AM_I, 1, &who, 1, HAL_MAX_DELAY);
+	if(ret != HAL_OK){
+		strcpy((char*)buf, "Error finding device!\r\n");
+		return;
+	}
 	// If the device is available and working
-	if(who == 0x75){
-		// Wakeup the MPU-6050 IMU by writing 0 to the Power Management Register
-		data = 0;
-		HAL_I2C_Mem_Write(&hi2c1, IMU_ADDR, REG_PWR_MGMT_1, 1, &data, 1, HAL_MAX_DELAY);
+	if(who == 0x68){
+		// Wake up the MPU-6050 IMU by writing 0 to the Power Management 1 Register
+		data = 0x00;
+		ret = HAL_I2C_Mem_Write(&hi2c1, IMU_ADDR, REG_PWR_MGMT_1, 1, &data, 1, HAL_MAX_DELAY);
+		if(ret != HAL_OK){
+			strcpy((char*)buf, "Error waking up the device!\r\n");
+			return;
+		}
+		// Set the Sample Rate Divider(SMPLRT_DIV) used to generate the Sample Rate with the formula:
+		//	Sample Rate = Gyroscope Output Rate / (1 + SMPLRT_DIV)
+		//	where Gyroscope Output Rate = 8kHz
+		// Set SMPLRT_DIV >= 7 to avoid duplicate samples of the accelerometer which has an output rate of 1kHz
+		data = 0x07;
+		ret = HAL_I2C_Mem_Write(&hi2c1, IMU_ADDR, REG_SMPRT_DIV, 1, &data, 1, HAL_MAX_DELAY);
+		if(ret != HAL_OK){
+			strcpy((char*)buf, "Error setting the Sample Rate Divider!\r\n");
+			return;
+		}
+		// Configure the Full Scale range for the Accelerometer and Gyroscope
+		// Gyroscope: FS_SEL = 0,1,2,3 corresponds to Full Scale Range of +- 250,500,1000,2000 deg/s respectively
+		// Accelerometer: AFS_SEL = 0,1,2,3 corresponds to Full Scale Range of +- 2,4,8,16 g
+		// Self test of both devices is not set, +- 250deg/s & +-2g
+		data = 0x00;
+		ret = HAL_I2C_Mem_Write(&hi2c1, IMU_ADDR, REG_GYRO_CONFIG, 1, &data, 1, HAL_MAX_DELAY);
+		if(ret != HAL_OK){
+			strcpy((char*)buf, "Error configuring the gyroscope full scale range!\r\n");
+			return;
+		}
+		data = 0x00;
+		ret = HAL_I2C_Mem_Write(&hi2c1, IMU_ADDR, REG_ACCEL_CONFIG, 1, &data, 1, HAL_MAX_DELAY);
+		if(ret != HAL_OK){
+			strcpy((char*)buf, "Error configuring the accelerometer full scale range!\r\n");
+			return;
+		}
+	}
+	strcpy((char*)buf, "Successful Initialisation of MPU6050!\r\n");
+}
+
+void MPU6050_Read_Sensor_Values(MPU6050_Values *sensorValues, uint8_t *buf){
+	uint8_t rawDataBuf[6]; // Buffer to store the raw acceleration values
+	int16_t raw_accel_x;
+	int16_t raw_accel_y;
+	int16_t raw_accel_z;
+	int16_t raw_gyro_x;
+	int16_t raw_gyro_y;
+	int16_t raw_gyro_z;
+	float accel_sensitivity;
+	float gyro_sensitivity;
+	HAL_StatusTypeDef ret; // Error Status Struct
+
+	// Read from the 6 acceleration registers starting at ACCEL_XOUT_H
+	ret = HAL_I2C_Mem_Read(&hi2c1, IMU_ADDR, REG_ACCEL_XOUT_H, 1, rawDataBuf, 6, HAL_MAX_DELAY);
+	if(ret != HAL_OK){
+		strcpy((char*)buf, "Error Reading Accel Values!\r\n");
+		return;
+	} else {
+		// Manipulate the received bytes to acquire the raw acceleration values
+		raw_accel_x = (int16_t)(rawDataBuf[0] << 8 | rawDataBuf[1]);
+		raw_accel_y = (int16_t)(rawDataBuf[2] << 8 | rawDataBuf[3]);
+		raw_accel_z = (int16_t)(rawDataBuf[4] << 8 | rawDataBuf[5]);
 	}
 
+	// Read from the 6 gyroscope registers starting at GYRO_XOUT_H
+	ret = HAL_I2C_Mem_Read(&hi2c1, IMU_ADDR, REG_GYRO_XOUT_H, 1, rawDataBuf, 6, HAL_MAX_DELAY);
+	if(ret != HAL_OK){
+		strcpy((char*)buf, "Error Reading Gyro Values!\r\n");
+		return;
+	} else {
+		// Manipulate the received bytes to acquire the raw acceleration values
+		raw_gyro_x = (int16_t)(rawDataBuf[0] << 8 | rawDataBuf[1]);
+		raw_gyro_y = (int16_t)(rawDataBuf[2] << 8 | rawDataBuf[3]);
+		raw_gyro_z = (int16_t)(rawDataBuf[4] << 8 | rawDataBuf[5]);
+	}
+	// Convert the raw measurement values into scaled readings
+	// Accelerometer: with FS_SEL = 0 -> +2g which corresponds to an accelerometer sensitivity per LSB of 16384 LSB/g
+	// Gyroscope: with AFS_SEL = 0 -> +- 250 deg/s which corresponds to a gyroscope sensitivity per LSB of 131 LSB/deg/s
+	accel_sensitivity = 16384;
+	gyro_sensitivity = 131;
+
+	sensorValues->accel_x = raw_accel_x / accel_sensitivity;
+	sensorValues->accel_y = raw_accel_y / accel_sensitivity;
+	sensorValues->accel_z = raw_accel_z / accel_sensitivity;
+
+	sensorValues->gyro_x = raw_gyro_x / gyro_sensitivity;
+	sensorValues->gyro_y = raw_gyro_y / gyro_sensitivity;
+	sensorValues->gyro_z = raw_gyro_z / gyro_sensitivity;
+
+	// Convert to string format
+	sprintf((char*)buf, "Accelerometer Readings\r\nAccel_x: %.2fg\r\n\nAccel_y: %.2fg\r\n", sensorValues->accel_x, sensorValues->accel_y);
 }
 
 /* USER CODE END 0 */
@@ -93,9 +197,8 @@ void MPU6050_Init(void){
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	HAL_StatusTypeDef ret; // Error Status Struct
-	uint8_t buf[40]; // Serial Buffer
-	int16_t accel_x; // Accelerometer x value
+	uint8_t buf[70]; // Serial Buffer
+	MPU6050_Values sensorValues;
 
   /* USER CODE END 1 */
 
@@ -105,19 +208,8 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
-
-  // Wakeup the MPU-6050 IMU
-//  buf[0] = REG_PWR_MGMT_1;
-//  ret = HAL_I2C_Master_Transmit(&hi2c1, IMU_ADDR, buf, 1, HAL_MAX_DELAY);
-//  if(ret != HAL_OK) {
-//	  strcpy((char*)buf, "Error Waking up!\r\n");
-//  }
-//  else {
-	   // Write zero
-//	  buf[0] = 0x00;
-//	  ret = HAL_I2C_Master_Transmit(&hi2c1, IMU_ADDR, buf, 1, HAL_MAX_DELAY);
-//  }
+  // Initialise the MPU6050 IMU
+  MPU6050_Init(buf);
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -139,23 +231,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  // Read from the ACCEL_X_H register
-	  buf[0] = REG_ACCEL_X_H;
-	  ret = HAL_I2C_Master_Transmit(&hi2c1, IMU_ADDR, buf, 1, HAL_MAX_DELAY);
-	  if(ret != HAL_OK){
-		  strcpy((char*)buf, "Error Tx!\r\n");
-	  } else {
-		  // Read from the register
-		  ret = HAL_I2C_Master_Receive(&hi2c1, IMU_ADDR, buf, 2, HAL_MAX_DELAY);
-		  if(ret != HAL_OK){
-			  strcpy((char*)buf, "Error Rx!\r\n");
-		  } else {
-			  // Convert the received data into a readable value
-			  accel_x = ((int16_t)buf[0] << 8) | (buf[1]);
-			  // Convert to string format
-			  sprintf((char*)buf, "Accelerometer Readings\nAccel_x: %d\r\n", accel_x);
-		  }
-	  }
+	  // Convert the received data into a readable value
+	  MPU6050_Read_Sensor_Values(&sensorValues, buf);
 	  // Transmit the message(data or error) in blocking mode
 	  // 	- Casting buffer as the function requires pointer to char array
 	  HAL_UART_Transmit(&huart2, buf, strlen((char*)buf), HAL_MAX_DELAY);
