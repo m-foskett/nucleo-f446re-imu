@@ -97,7 +97,7 @@ void MPU6050_Init(uint8_t *buf){
 		return;
 	}
 	// If the device is available and working
-	if(who == 0x68){
+	if(who == 114){
 		// Wake up the MPU-6050 IMU by writing 0 to the Power Management 1 Register
 		data = 0x00;
 		ret = HAL_I2C_Mem_Write(&hi2c1, IMU_ADDR, REG_PWR_MGMT_1, 1, &data, 1, HAL_MAX_DELAY);
@@ -131,8 +131,13 @@ void MPU6050_Init(uint8_t *buf){
 			strcpy((char*)buf, "Error configuring the accelerometer full scale range!\r\n");
 			return;
 		}
+		strcpy((char*)buf, "Successful Initialisation of MPU6050!\r\n");
+		return;
+	} else {
+		strcpy((char*)buf, "Wrong device found!\r\n");
+		return;
 	}
-	strcpy((char*)buf, "Successful Initialisation of MPU6050!\r\n");
+
 }
 
 void MPU6050_Read_Sensor_Values(MPU6050_Values *sensorValues, uint8_t *buf){
@@ -185,7 +190,9 @@ void MPU6050_Read_Sensor_Values(MPU6050_Values *sensorValues, uint8_t *buf){
 	sensorValues->gyro_z = raw_gyro_z / gyro_sensitivity;
 
 	// Convert to string format
-	sprintf((char*)buf, "Accelerometer Readings\r\nAccel_x: %.2fg\r\n\nAccel_y: %.2fg\r\n", sensorValues->accel_x, sensorValues->accel_y);
+	sprintf((char*)buf, "Ax: %.2fg Ay: %.2fg Az: %.2fg\r\nGx: %.2f*/s Gy: %.2f*/s Gz: %.2f*/s\r\n\n",
+			sensorValues->accel_x, sensorValues->accel_y, sensorValues->accel_z,
+			sensorValues->gyro_x, sensorValues->gyro_y, sensorValues->gyro_z);
 }
 
 /* USER CODE END 0 */
@@ -208,8 +215,7 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-  // Initialise the MPU6050 IMU
-  MPU6050_Init(buf);
+
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -224,6 +230,10 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+  // Initialise the MPU6050 IMU
+  MPU6050_Init(buf);
+  // Transmit the status of the MPU6050 initialisation
+  HAL_UART_Transmit(&huart2, buf, strlen((char*)buf), HAL_MAX_DELAY);
 
   /* USER CODE END 2 */
 
