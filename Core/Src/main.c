@@ -23,6 +23,8 @@
 /* USER CODE BEGIN Includes */
 #include <string.h>
 #include <stdio.h>
+#include <LCD1602.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,6 +53,8 @@ typedef struct {
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
+TIM_HandleTypeDef htim1;
+
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
@@ -78,6 +82,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_TIM1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -85,7 +90,7 @@ static void MX_I2C1_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void MPU6050_Init(uint8_t *buf){
+bool MPU6050_Init(uint8_t *buf){
 	uint8_t who;
 	uint8_t data;
 	HAL_StatusTypeDef ret; // Error Status Struct
@@ -94,7 +99,7 @@ void MPU6050_Init(uint8_t *buf){
 	ret = HAL_I2C_Mem_Read(&hi2c1, IMU_ADDR, REG_WHO_AM_I, 1, &who, 1, HAL_MAX_DELAY);
 	if(ret != HAL_OK){
 		strcpy((char*)buf, "Error finding device!\r\n");
-		return;
+		return false;
 	}
 	// If the device is available and working
 	if(who == 114){
@@ -103,7 +108,7 @@ void MPU6050_Init(uint8_t *buf){
 		ret = HAL_I2C_Mem_Write(&hi2c1, IMU_ADDR, REG_PWR_MGMT_1, 1, &data, 1, HAL_MAX_DELAY);
 		if(ret != HAL_OK){
 			strcpy((char*)buf, "Error waking up the device!\r\n");
-			return;
+			return false;
 		}
 		// Set the Sample Rate Divider(SMPLRT_DIV) used to generate the Sample Rate with the formula:
 		//	Sample Rate = Gyroscope Output Rate / (1 + SMPLRT_DIV)
@@ -113,7 +118,7 @@ void MPU6050_Init(uint8_t *buf){
 		ret = HAL_I2C_Mem_Write(&hi2c1, IMU_ADDR, REG_SMPRT_DIV, 1, &data, 1, HAL_MAX_DELAY);
 		if(ret != HAL_OK){
 			strcpy((char*)buf, "Error setting the Sample Rate Divider!\r\n");
-			return;
+			return false;
 		}
 		// Configure the Full Scale range for the Accelerometer and Gyroscope
 		// Gyroscope: FS_SEL = 0,1,2,3 corresponds to Full Scale Range of +- 250,500,1000,2000 deg/s respectively
@@ -123,19 +128,19 @@ void MPU6050_Init(uint8_t *buf){
 		ret = HAL_I2C_Mem_Write(&hi2c1, IMU_ADDR, REG_GYRO_CONFIG, 1, &data, 1, HAL_MAX_DELAY);
 		if(ret != HAL_OK){
 			strcpy((char*)buf, "Error configuring the gyroscope full scale range!\r\n");
-			return;
+			return false;
 		}
 		data = 0x00;
 		ret = HAL_I2C_Mem_Write(&hi2c1, IMU_ADDR, REG_ACCEL_CONFIG, 1, &data, 1, HAL_MAX_DELAY);
 		if(ret != HAL_OK){
 			strcpy((char*)buf, "Error configuring the accelerometer full scale range!\r\n");
-			return;
+			return false;
 		}
 		strcpy((char*)buf, "Successful Initialisation of MPU6050!\r\n");
-		return;
+		return true;
 	} else {
 		strcpy((char*)buf, "Wrong device found!\r\n");
-		return;
+		return false;
 	}
 
 }
@@ -229,11 +234,30 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_I2C1_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  // Start Timer 1 before initialising the LCD1602 module
+  HAL_TIM_Base_Start(&htim1);
+
+  // Initialise the LCD1602 module
+  LCD_Initialise();
+  // Place the Cursor at (0,0)
+  LCD_PlaceCursor(0, 0);
+  // Display a message to show that the LCD1602 module is initialised
+  LCD_SendString("LCD Initialised");
+  HAL_Delay(3000);
+  LCD_Clear();
+
   // Initialise the MPU6050 IMU
-  MPU6050_Init(buf);
+  bool success = MPU6050_Init(buf);
+  if(success){
+	  LCD_SendString("MPU6050 Ready!");
+	  HAL_Delay(3000);
+	  LCD_Clear();
+  };
   // Transmit the status of the MPU6050 initialisation
   HAL_UART_Transmit(&huart2, buf, strlen((char*)buf), HAL_MAX_DELAY);
+
 
   /* USER CODE END 2 */
 
@@ -243,10 +267,30 @@ int main(void)
   {
 	  // Convert the received data into a readable value
 	  MPU6050_Read_Sensor_Values(&sensorValues, buf);
+
+	  // Display the MPU6050 sensor readings on the LCD1602 module
+
+
 	  // Transmit the message(data or error) in blocking mode
 	  // 	- Casting buffer as the function requires pointer to char array
 	  HAL_UART_Transmit(&huart2, buf, strlen((char*)buf), HAL_MAX_DELAY);
-	  HAL_Delay(500); // Half second delay between repeated transmissions for 2 samples/second
+	  // Display the MPU6050 sensor readings on the LCD1602 module
+	  sprintf((char*)buf, "Ax%.2f Ay%.2f",
+	  			sensorValues.accel_x, sensorValues.accel_y);
+	  LCD_SendString((char*)buf);
+	  LCD_PlaceCursor(1, 5);
+	  sprintf((char*)buf, "Az%.2f", sensorValues.accel_z);
+	  LCD_SendString((char*)buf);
+	  HAL_Delay(1000);
+	  LCD_Clear();
+	  sprintf((char*)buf, "Gx%.2f Gy%.2f",
+	  			sensorValues.gyro_x, sensorValues.gyro_y);
+	  LCD_SendString((char*)buf);
+	  LCD_PlaceCursor(1, 5);
+	  sprintf((char*)buf, "Gz%.2f", sensorValues.gyro_z);
+	  LCD_SendString((char*)buf);
+	  HAL_Delay(1000);
+	  LCD_Clear();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -336,6 +380,52 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief TIM1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM1_Init(void)
+{
+
+  /* USER CODE BEGIN TIM1_Init 0 */
+
+  /* USER CODE END TIM1_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM1_Init 1 */
+
+  /* USER CODE END TIM1_Init 1 */
+  htim1.Instance = TIM1;
+  htim1.Init.Prescaler = 84-1;
+  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim1.Init.Period = 0xFFFF-1;
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim1.Init.RepetitionCounter = 0;
+  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -386,7 +476,14 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, LD2_Pin|GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8
+                          |GPIO_PIN_9, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10|GPIO_PIN_6, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_7, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -394,12 +491,28 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
+  /*Configure GPIO pins : LD2_Pin PA6 PA7 PA8
+                           PA9 */
+  GPIO_InitStruct.Pin = LD2_Pin|GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8
+                          |GPIO_PIN_9;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PB10 PB6 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_6;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PC7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
