@@ -274,7 +274,7 @@ int main(void)
 	  // Transmit the message(data or error) in blocking mode
 	  // 	- Casting buffer as the function requires pointer to char array
 	  HAL_UART_Transmit(&huart2, buf, strlen((char*)buf), HAL_MAX_DELAY);
-	  // Display the MPU6050 sensor readings on the LCD1602 module
+	  // Display the MPU6050 accelerometer readings on the LCD1602 module
 	  sprintf((char*)buf, "Ax%.2f Ay%.2f",
 	  			sensorValues.accel_x, sensorValues.accel_y);
 	  LCD_SendString((char*)buf);
@@ -283,6 +283,7 @@ int main(void)
 	  LCD_SendString((char*)buf);
 	  HAL_Delay(1000);
 	  LCD_Clear();
+	  // Display the MPU6050 gyroscope readings on the LCD1602 module
 	  sprintf((char*)buf, "Gx%.2f Gy%.2f",
 	  			sensorValues.gyro_x, sensorValues.gyro_y);
 	  LCD_SendString((char*)buf);
