@@ -281,7 +281,7 @@ int main(void)
 	  LCD_PlaceCursor(1, 5);
 	  sprintf((char*)buf, "Az%.2f", sensorValues.accel_z);
 	  LCD_SendString((char*)buf);
-	  HAL_Delay(1000);
+	  HAL_Delay(1000); // 1 sample/second
 	  LCD_Clear();
 	  // Display the MPU6050 gyroscope readings on the LCD1602 module
 	  sprintf((char*)buf, "Gx%.2f Gy%.2f",
