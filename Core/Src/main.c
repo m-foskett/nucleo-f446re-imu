@@ -290,7 +290,7 @@ int main(void)
 	  LCD_PlaceCursor(1, 5);
 	  sprintf((char*)buf, "Gz%.2f", sensorValues.gyro_z);
 	  LCD_SendString((char*)buf);
-	  HAL_Delay(1000);
+	  HAL_Delay(1000); // 1 sample/second, need to add CMSIS-RTOS to display and read at the same time via multi-threading
 	  LCD_Clear();
     /* USER CODE END WHILE */
 
