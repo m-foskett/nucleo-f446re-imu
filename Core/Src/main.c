@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -57,6 +58,9 @@ TIM_HandleTypeDef htim1;
 
 UART_HandleTypeDef huart2;
 
+osThreadId lcdTaskHandle;
+osThreadId imuTaskHandle;
+osThreadId uartTaskHandle;
 /* USER CODE BEGIN PV */
 // Address of the MPU-6050 IMU
 // Might need to be left shifted by 1
@@ -83,6 +87,10 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
+void startLCDTask(void const * argument);
+void startIMUTask(void const * argument);
+void startUARTTask(void const * argument);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -261,37 +269,47 @@ int main(void)
 
   /* USER CODE END 2 */
 
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* definition and creation of lcdTask */
+  osThreadDef(lcdTask, startLCDTask, osPriorityAboveNormal, 0, 128);
+  lcdTaskHandle = osThreadCreate(osThread(lcdTask), NULL);
+
+  /* definition and creation of imuTask */
+  osThreadDef(imuTask, startIMUTask, osPriorityNormal, 0, 128);
+  imuTaskHandle = osThreadCreate(osThread(imuTask), NULL);
+
+  /* definition and creation of uartTask */
+  osThreadDef(uartTask, startUARTTask, osPriorityNormal, 0, 128);
+  uartTaskHandle = osThreadCreate(osThread(uartTask), NULL);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  // Convert the received data into a readable value
-	  MPU6050_Read_Sensor_Values(&sensorValues, buf);
-
-	  // Display the MPU6050 sensor readings on the LCD1602 module
-
-
-	  // Transmit the message(data or error) in blocking mode
-	  // 	- Casting buffer as the function requires pointer to char array
-	  HAL_UART_Transmit(&huart2, buf, strlen((char*)buf), HAL_MAX_DELAY);
-	  // Display the MPU6050 accelerometer readings on the LCD1602 module
-	  sprintf((char*)buf, "Ax%.2f Ay%.2f",
-	  			sensorValues.accel_x, sensorValues.accel_y);
-	  LCD_SendString((char*)buf);
-	  LCD_PlaceCursor(1, 5);
-	  sprintf((char*)buf, "Az%.2f", sensorValues.accel_z);
-	  LCD_SendString((char*)buf);
-	  HAL_Delay(1000); // 1 sample/second
-	  LCD_Clear();
-	  // Display the MPU6050 gyroscope readings on the LCD1602 module
-	  sprintf((char*)buf, "Gx%.2f Gy%.2f",
-	  			sensorValues.gyro_x, sensorValues.gyro_y);
-	  LCD_SendString((char*)buf);
-	  LCD_PlaceCursor(1, 5);
-	  sprintf((char*)buf, "Gz%.2f", sensorValues.gyro_z);
-	  LCD_SendString((char*)buf);
-	  HAL_Delay(1000); // 1 sample/second, need to add CMSIS-RTOS to display and read at the same time via multi-threading
-	  LCD_Clear();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -522,6 +540,107 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_startLCDTask */
+/**
+  * @brief  Function implementing the lcdTask thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+/* USER CODE END Header_startLCDTask */
+void startLCDTask(void const * argument)
+{
+  /* USER CODE BEGIN 5 */
+  /* Infinite loop */
+  for(;;)
+  {
+	  // Display the MPU6050 accelerometer readings on the LCD1602 module
+		sprintf((char*)buf, "Ax%.2f Ay%.2f",
+				sensorValues.accel_x, sensorValues.accel_y);
+		LCD_SendString((char*)buf);
+		LCD_PlaceCursor(1, 5);
+		sprintf((char*)buf, "Az%.2f", sensorValues.accel_z);
+		LCD_SendString((char*)buf);
+//		HAL_Delay(1000); // 1 sample/second
+		osDelay(1000);
+		LCD_Clear();
+		// Display the MPU6050 gyroscope readings on the LCD1602 module
+		sprintf((char*)buf, "Gx%.2f Gy%.2f",
+				sensorValues.gyro_x, sensorValues.gyro_y);
+		LCD_SendString((char*)buf);
+		LCD_PlaceCursor(1, 5);
+		sprintf((char*)buf, "Gz%.2f", sensorValues.gyro_z);
+		LCD_SendString((char*)buf);
+//		HAL_Delay(1000); // 1 sample/second, need to add CMSIS-RTOS to display and read at the same time via multi-threading
+		osDelay(1000);
+		LCD_Clear();
+  }
+  /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_startIMUTask */
+/**
+* @brief Function implementing the imuTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_startIMUTask */
+void startIMUTask(void const * argument)
+{
+  /* USER CODE BEGIN startIMUTask */
+  /* Infinite loop */
+  for(;;)
+  {
+	  // Convert the received data into a readable value
+	  MPU6050_Read_Sensor_Values(&sensorValues, buf);
+
+	  osDelay(1000);
+  }
+  /* USER CODE END startIMUTask */
+}
+
+/* USER CODE BEGIN Header_startUARTTask */
+/**
+* @brief Function implementing the uartTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_startUARTTask */
+void startUARTTask(void const * argument)
+{
+  /* USER CODE BEGIN startUARTTask */
+  /* Infinite loop */
+  for(;;)
+  {
+	// Transmit the message(data or error) in blocking mode
+	// 	- Casting buffer as the function requires pointer to char array
+	HAL_UART_Transmit(&huart2, buf, strlen((char*)buf), HAL_MAX_DELAY);
+
+    osDelay(1000);
+  }
+  /* USER CODE END startUARTTask */
+}
+
+/**
+  * @brief  Period elapsed callback in non blocking mode
+  * @note   This function is called  when TIM6 interrupt took place, inside
+  * HAL_TIM_IRQHandler(). It makes a direct call to HAL_IncTick() to increment
+  * a global variable "uwTick" used as application time base.
+  * @param  htim : TIM handle
+  * @retval None
+  */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  /* USER CODE BEGIN Callback 0 */
+
+  /* USER CODE END Callback 0 */
+  if (htim->Instance == TIM6) {
+    HAL_IncTick();
+  }
+  /* USER CODE BEGIN Callback 1 */
+
+  /* USER CODE END Callback 1 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.
