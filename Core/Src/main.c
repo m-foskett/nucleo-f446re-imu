@@ -575,6 +575,8 @@ void startLCDTask(void const * argument)
 		osDelay(1000);
 		LCD_Clear();
   }
+  // Fallback cleanup of thread in case forever loop was exited accidentally
+  osThreadTerminate(NULL);
   /* USER CODE END 5 */
 }
 
@@ -596,6 +598,8 @@ void startIMUTask(void const * argument)
 
 	  osDelay(1000);
   }
+  // Fallback cleanup of thread in case forever loop was exited accidentally
+  osThreadTerminate(NULL);
   /* USER CODE END startIMUTask */
 }
 
@@ -618,6 +622,8 @@ void startUARTTask(void const * argument)
 
     osDelay(1000);
   }
+  // Fallback cleanup of thread in case forever loop was exited accidentally
+  osThreadTerminate(NULL);
   /* USER CODE END startUARTTask */
 }
 
