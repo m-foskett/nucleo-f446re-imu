@@ -208,6 +208,11 @@ void MPU6050_Read_Sensor_Values(MPU6050_Values *sensorValues, uint8_t *buf){
 			sensorValues->gyro_x, sensorValues->gyro_y, sensorValues->gyro_z);
 }
 
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Queue Handler
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+xQueueHandle St_Queue_Handler;
+
 /* USER CODE END 0 */
 
 /**
