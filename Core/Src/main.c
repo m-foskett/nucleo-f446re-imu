@@ -18,7 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "cmsis_os.h"
+//#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -26,6 +26,13 @@
 #include <stdio.h>
 #include <LCD1602.h>
 #include <stdbool.h>
+
+#include "FreeRTOS.h"
+#include "task.h"
+#include "timers.h"
+#include "queue.h"
+#include "semphr.h"
+#include "event_groups.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -58,9 +65,6 @@ TIM_HandleTypeDef htim1;
 
 UART_HandleTypeDef huart2;
 
-osThreadId lcdTaskHandle;
-osThreadId imuTaskHandle;
-osThreadId uartTaskHandle;
 /* USER CODE BEGIN PV */
 // Address of the MPU-6050 IMU
 // Might need to be left shifted by 1
@@ -87,9 +91,6 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM1_Init(void);
-void startLCDTask(void const * argument);
-void startIMUTask(void const * argument);
-void startUARTTask(void const * argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -212,6 +213,18 @@ void MPU6050_Read_Sensor_Values(MPU6050_Values *sensorValues, uint8_t *buf){
 // Queue Handler
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 xQueueHandle St_Queue_Handler;
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Task Handlers
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+xTaskHandle IMU_Measure_Task_Handler;
+xTaskHandle LCD_Display_Task_Handler;
+xTaskHandle UART_Display_Task_Handler;
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Task Functions
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+void IMU_Measure_Task(void *argument);
+void LCD_Display_Task(void *argument);
+void UART_Display_Task(void *argument);
 
 /* USER CODE END 0 */
 
@@ -249,6 +262,59 @@ int main(void)
   MX_I2C1_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+
+  // Create Queue ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  St_Queue_Handler = xQueueCreate(2, sizeof(MPU6050_Values));
+  // Error Handling for queue creation
+  if(St_Queue_Handler == 0){
+	  char *str = "Structured Queue creation failed!\n\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+  } else {
+	  char *str = "Structured Queue creation successful!\n\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+  }
+  // Create Tasks ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  // BaseType_t xTaskCreate(
+  	  //  TaskFunction_t pvTaskCode, - Pointer to the task entry function
+  	  //  const char * const pcName, - Descriptive name for the task
+  	  //  const configSTACK_DEPTH_TYPE uxStackDepth, - Stack depth in words to allocate for use as task's stack
+  	  //  void *pvParameters, - value passed as parameter to the created task
+  	  //  UBaseType_t uxPriority, - priority at which the created task will execute
+  	  //  TaskHandle_t *pxCreatedTask - used to pass a handle to the created task, optional and can be NULL
+  //);
+  BaseType_t xReturnValue; // Return value for task creation
+  // IMU_Measure_Task Creation
+  xReturnValue = xTaskCreate(IMU_Measure_Task, "IMU_Measure", 128, NULL, 2, &IMU_Measure_Task_Handler);
+  if(xReturnValue == pdPASS){
+	  char *str = "IMU_Measure task was successfully created!\n\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+  } else {
+	  char *str = "Failed to create IMU_Measure task!\n\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+  }
+  // LCD_Display_Task Creation
+  xReturnValue = xTaskCreate(LCD_Display_Task, "LCD_Display", 128, NULL, 2, &LCD_Display_Task_Handler);
+  if(xReturnValue == pdPASS){
+	  char *str = "LCD_Display task was successfully created!\n\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+  } else {
+	  char *str = "Failed to create LCD_Display task!\n\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+  }
+  // UART_Display_Task Creation
+  xReturnValue = xTaskCreate(UART_Display_Task, "UART_Display", 128, NULL, 2, &UART_Display_Task_Handler);
+  if(xReturnValue == pdPASS){
+	  char *str = "UART_Display task was successfully created!\n\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+  } else {
+	  char *str = "Failed to create UART_Display task!\n\n";
+	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+  }
+  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  // SCHEDULER START
+  //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  vTaskStartScheduler();
+
   // Start Timer 1 before initialising the LCD1602 module
   HAL_TIM_Base_Start(&htim1);
 
@@ -273,42 +339,6 @@ int main(void)
 
 
   /* USER CODE END 2 */
-
-  /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
-
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
-
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
-
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
-
-  /* Create the thread(s) */
-  /* definition and creation of lcdTask */
-  osThreadDef(lcdTask, startLCDTask, osPriorityAboveNormal, 0, 128);
-  lcdTaskHandle = osThreadCreate(osThread(lcdTask), NULL);
-
-  /* definition and creation of imuTask */
-  osThreadDef(imuTask, startIMUTask, osPriorityNormal, 0, 128);
-  imuTaskHandle = osThreadCreate(osThread(imuTask), NULL);
-
-  /* definition and creation of uartTask */
-  osThreadDef(uartTask, startUARTTask, osPriorityNormal, 0, 128);
-  uartTaskHandle = osThreadCreate(osThread(uartTask), NULL);
-
-  /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
-  /* USER CODE END RTOS_THREADS */
-
-  /* Start scheduler */
-  osKernelStart();
 
   /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
@@ -553,84 +583,84 @@ static void MX_GPIO_Init(void)
   * @retval None
   */
 /* USER CODE END Header_startLCDTask */
-void startLCDTask(void const * argument)
-{
-  /* USER CODE BEGIN 5 */
-  /* Infinite loop */
-  for(;;)
-  {
-	  // Display the MPU6050 accelerometer readings on the LCD1602 module
-		sprintf((char*)buf, "Ax%.2f Ay%.2f",
-				sensorValues.accel_x, sensorValues.accel_y);
-		LCD_SendString((char*)buf);
-		LCD_PlaceCursor(1, 5);
-		sprintf((char*)buf, "Az%.2f", sensorValues.accel_z);
-		LCD_SendString((char*)buf);
-//		HAL_Delay(1000); // 1 sample/second
-		osDelay(1000);
-		LCD_Clear();
-		// Display the MPU6050 gyroscope readings on the LCD1602 module
-		sprintf((char*)buf, "Gx%.2f Gy%.2f",
-				sensorValues.gyro_x, sensorValues.gyro_y);
-		LCD_SendString((char*)buf);
-		LCD_PlaceCursor(1, 5);
-		sprintf((char*)buf, "Gz%.2f", sensorValues.gyro_z);
-		LCD_SendString((char*)buf);
-//		HAL_Delay(1000); // 1 sample/second, need to add CMSIS-RTOS to display and read at the same time via multi-threading
-		osDelay(1000);
-		LCD_Clear();
-  }
-  // Fallback cleanup of thread in case forever loop was exited accidentally
-  osThreadTerminate(NULL);
-  /* USER CODE END 5 */
-}
-
-/* USER CODE BEGIN Header_startIMUTask */
-/**
-* @brief Function implementing the imuTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_startIMUTask */
-void startIMUTask(void const * argument)
-{
-  /* USER CODE BEGIN startIMUTask */
-  /* Infinite loop */
-  for(;;)
-  {
-	  // Convert the received data into a readable value
-	  MPU6050_Read_Sensor_Values(&sensorValues, buf);
-
-	  osDelay(1000);
-  }
-  // Fallback cleanup of thread in case forever loop was exited accidentally
-  osThreadTerminate(NULL);
-  /* USER CODE END startIMUTask */
-}
-
-/* USER CODE BEGIN Header_startUARTTask */
-/**
-* @brief Function implementing the uartTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_startUARTTask */
-void startUARTTask(void const * argument)
-{
-  /* USER CODE BEGIN startUARTTask */
-  /* Infinite loop */
-  for(;;)
-  {
-	// Transmit the message(data or error) in blocking mode
-	// 	- Casting buffer as the function requires pointer to char array
-	HAL_UART_Transmit(&huart2, buf, strlen((char*)buf), HAL_MAX_DELAY);
-
-    osDelay(1000);
-  }
-  // Fallback cleanup of thread in case forever loop was exited accidentally
-  osThreadTerminate(NULL);
-  /* USER CODE END startUARTTask */
-}
+//void startLCDTask(void const * argument)
+//{
+//  /* USER CODE BEGIN 5 */
+//  /* Infinite loop */
+//  for(;;)
+//  {
+//	  // Display the MPU6050 accelerometer readings on the LCD1602 module
+//		sprintf((char*)buf, "Ax%.2f Ay%.2f",
+//				sensorValues.accel_x, sensorValues.accel_y);
+//		LCD_SendString((char*)buf);
+//		LCD_PlaceCursor(1, 5);
+//		sprintf((char*)buf, "Az%.2f", sensorValues.accel_z);
+//		LCD_SendString((char*)buf);
+////		HAL_Delay(1000); // 1 sample/second
+//		osDelay(1000);
+//		LCD_Clear();
+//		// Display the MPU6050 gyroscope readings on the LCD1602 module
+//		sprintf((char*)buf, "Gx%.2f Gy%.2f",
+//				sensorValues.gyro_x, sensorValues.gyro_y);
+//		LCD_SendString((char*)buf);
+//		LCD_PlaceCursor(1, 5);
+//		sprintf((char*)buf, "Gz%.2f", sensorValues.gyro_z);
+//		LCD_SendString((char*)buf);
+////		HAL_Delay(1000); // 1 sample/second, need to add CMSIS-RTOS to display and read at the same time via multi-threading
+//		osDelay(1000);
+//		LCD_Clear();
+//  }
+//  // Fallback cleanup of thread in case forever loop was exited accidentally
+//  osThreadTerminate(NULL);
+//  /* USER CODE END 5 */
+//}
+//
+///* USER CODE BEGIN Header_startIMUTask */
+///**
+//* @brief Function implementing the imuTask thread.
+//* @param argument: Not used
+//* @retval None
+//*/
+///* USER CODE END Header_startIMUTask */
+//void startIMUTask(void const * argument)
+//{
+//  /* USER CODE BEGIN startIMUTask */
+//  /* Infinite loop */
+//  for(;;)
+//  {
+//	  // Convert the received data into a readable value
+//	  MPU6050_Read_Sensor_Values(&sensorValues, buf);
+//
+//	  osDelay(1000);
+//  }
+//  // Fallback cleanup of thread in case forever loop was exited accidentally
+//  osThreadTerminate(NULL);
+//  /* USER CODE END startIMUTask */
+//}
+//
+///* USER CODE BEGIN Header_startUARTTask */
+///**
+//* @brief Function implementing the uartTask thread.
+//* @param argument: Not used
+//* @retval None
+//*/
+///* USER CODE END Header_startUARTTask */
+//void startUARTTask(void const * argument)
+//{
+//  /* USER CODE BEGIN startUARTTask */
+//  /* Infinite loop */
+//  for(;;)
+//  {
+//	// Transmit the message(data or error) in blocking mode
+//	// 	- Casting buffer as the function requires pointer to char array
+//	HAL_UART_Transmit(&huart2, buf, strlen((char*)buf), HAL_MAX_DELAY);
+//
+//    osDelay(1000);
+//  }
+//  // Fallback cleanup of thread in case forever loop was exited accidentally
+//  osThreadTerminate(NULL);
+//  /* USER CODE END startUARTTask */
+//}
 
 /**
   * @brief  Period elapsed callback in non blocking mode
