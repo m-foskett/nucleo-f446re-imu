@@ -37,6 +37,23 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+
+enum MPU6050_Initialisation_Status {
+	SUCCESS,
+	DEVICE_NOT_FOUND,
+	WRONG_DEVICE,
+	DEVICE_ASLEEP,
+	ERROR_SMPLRT_DIV,
+	ERROR_GYRO_CONFIG,
+	ERROR_ACC_CONFIG,
+};
+
+enum MPU6050_Measure_Status {
+	SUCCESS,
+	ERROR_READING_GYRO,
+	ERROR_READING_ACC,
+};
+
 typedef struct {
 	float accel_x;
 	float accel_y;
@@ -44,6 +61,7 @@ typedef struct {
 	float gyro_x;
 	float gyro_y;
 	float gyro_z;
+	enum MPU6050_Measure_Status status;
 } MPU6050_Values;
 
 /* USER CODE END PTD */
@@ -154,7 +172,7 @@ bool MPU6050_Init(uint8_t *buf){
 
 }
 
-void MPU6050_Read_Sensor_Values(MPU6050_Values *sensorValues, uint8_t *buf){
+void MPU6050_Read_Sensor_Values(MPU6050_Values *sensorValues){
 	uint8_t rawDataBuf[6]; // Buffer to store the raw acceleration values
 	int16_t raw_accel_x;
 	int16_t raw_accel_y;
@@ -169,7 +187,8 @@ void MPU6050_Read_Sensor_Values(MPU6050_Values *sensorValues, uint8_t *buf){
 	// Read from the 6 acceleration registers starting at ACCEL_XOUT_H
 	ret = HAL_I2C_Mem_Read(&hi2c1, IMU_ADDR, REG_ACCEL_XOUT_H, 1, rawDataBuf, 6, HAL_MAX_DELAY);
 	if(ret != HAL_OK){
-		strcpy((char*)buf, "Error Reading Accel Values!\r\n");
+//		strcpy((char*)buf, "Error Reading Accel Values!\r\n");
+		sensorValues->status = ERROR_READING_ACC;
 		return;
 	} else {
 		// Manipulate the received bytes to acquire the raw acceleration values
@@ -181,7 +200,8 @@ void MPU6050_Read_Sensor_Values(MPU6050_Values *sensorValues, uint8_t *buf){
 	// Read from the 6 gyroscope registers starting at GYRO_XOUT_H
 	ret = HAL_I2C_Mem_Read(&hi2c1, IMU_ADDR, REG_GYRO_XOUT_H, 1, rawDataBuf, 6, HAL_MAX_DELAY);
 	if(ret != HAL_OK){
-		strcpy((char*)buf, "Error Reading Gyro Values!\r\n");
+//		strcpy((char*)buf, "Error Reading Gyro Values!\r\n");
+		sensorValues->status = ERROR_READING_GYRO;
 		return;
 	} else {
 		// Manipulate the received bytes to acquire the raw acceleration values
@@ -204,9 +224,10 @@ void MPU6050_Read_Sensor_Values(MPU6050_Values *sensorValues, uint8_t *buf){
 	sensorValues->gyro_z = raw_gyro_z / gyro_sensitivity;
 
 	// Convert to string format
-	sprintf((char*)buf, "Ax: %.2fg Ay: %.2fg Az: %.2fg\r\nGx: %.2f*/s Gy: %.2f*/s Gz: %.2f*/s\r\n\n",
-			sensorValues->accel_x, sensorValues->accel_y, sensorValues->accel_z,
-			sensorValues->gyro_x, sensorValues->gyro_y, sensorValues->gyro_z);
+//	sprintf((char*)buf, "Ax: %.2fg Ay: %.2fg Az: %.2fg\r\nGx: %.2f*/s Gy: %.2f*/s Gz: %.2f*/s\r\n\n",
+//			sensorValues->accel_x, sensorValues->accel_y, sensorValues->accel_z,
+//			sensorValues->gyro_x, sensorValues->gyro_y, sensorValues->gyro_z);
+	sensorValues->status = SUCCESS;
 }
 
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -236,7 +257,6 @@ int main(void)
 {
   /* USER CODE BEGIN 1 */
 	uint8_t buf[70]; // Serial Buffer
-	MPU6050_Values sensorValues;
 
   /* USER CODE END 1 */
 
@@ -574,6 +594,45 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+void IMU_Measure_Task (void *argument){
+	// Pointer to the sensor values struct
+	MPU6050_Values *sensorValues;
+
+	// Convert ms delay to ticks
+	const TickType_t tickDelay = pdMS_TO_TICKS(1000);
+
+	/* Infinite loop */
+	for(;;)
+	{
+		// Allocate memory in the 'Portable Layer' of the FreeRTOS
+		//	- Returns a pointer of type void which can be cast into a pointer of any form
+		sensorValues = pvPortMalloc(sizeof(MPU6050_Values));
+		// Get the sensor values from the MPU6050 module
+		MPU6050_Read_Sensor_Values(sensorValues);
+		// Post the sensor data to the queue. The item is queued by copy, not by reference
+		//		BaseType_t xQueueSend(
+		//				QueueHandle_t xQueue, - handle to the queue
+		//				const void * pvItemToQueue, - pointer to the item to be placed on the queue
+		//				TickType_t xTicksToWait - max amount of time the task should block waiting for available space on the queue
+		//		);
+		BaseType_t xReturnValue; // Return value for queue send
+		xReturnValue = xQueueSend(St_Queue_Handler, &sensorValues, portMAX_DELAY);
+
+		if(xReturnValue == pdTRUE){
+		  char *str = "Successfully posted sensor data to the queue!\n\n";
+		  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+		} else {
+		  char *str = "Failed to post sensor data to the queue!\n\n";
+		  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+		}
+
+		vTaskDelay(tickDelay); // 1 second delay in ticks
+
+	}
+	// Fallback cleanup of thread in case forever loop was exited accidentally
+	vTaskDelete(IMU_Measure_Task_Handler);
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_startLCDTask */
@@ -614,30 +673,6 @@ static void MX_GPIO_Init(void)
 //  osThreadTerminate(NULL);
 //  /* USER CODE END 5 */
 //}
-//
-///* USER CODE BEGIN Header_startIMUTask */
-///**
-//* @brief Function implementing the imuTask thread.
-//* @param argument: Not used
-//* @retval None
-//*/
-///* USER CODE END Header_startIMUTask */
-//void startIMUTask(void const * argument)
-//{
-//  /* USER CODE BEGIN startIMUTask */
-//  /* Infinite loop */
-//  for(;;)
-//  {
-//	  // Convert the received data into a readable value
-//	  MPU6050_Read_Sensor_Values(&sensorValues, buf);
-//
-//	  osDelay(1000);
-//  }
-//  // Fallback cleanup of thread in case forever loop was exited accidentally
-//  osThreadTerminate(NULL);
-//  /* USER CODE END startIMUTask */
-//}
-//
 ///* USER CODE BEGIN Header_startUARTTask */
 ///**
 //* @brief Function implementing the uartTask thread.
