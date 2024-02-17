@@ -8,6 +8,24 @@
 #ifndef INC_LCD1602_H_
 #define INC_LCD1602_H_
 
+// Address of the MPU-6050 IMU
+// 	- Needs to be left shifted by 1 as it is a 7-bit address
+static const uint8_t IMU_ADDR = 0x68 << 1;
+// PWR_MGMT_1 Register
+static const uint8_t REG_PWR_MGMT_1 = 0x6B;
+// WHO_AM_I register for the MPU6050
+static const uint8_t REG_WHO_AM_I = 0x75;
+// Sample Rate Divider Register
+static const uint8_t REG_SMPRT_DIV = 0x19;
+// Gyroscope Configuration Register
+static const uint8_t REG_GYRO_CONFIG = 0x1B;
+// Accelerometer Configuration Register
+static const uint8_t REG_ACCEL_CONFIG = 0x1C;
+// Accelerometer Measurement Register
+static const uint8_t REG_ACCEL_XOUT_H = 0x3B;
+// Gyroscope Measurement Register
+static const uint8_t REG_GYRO_XOUT_H = 0x43;
+
 // Function: void LCD_Initialise(void)
 // Parameters:
 //	- void
