@@ -79,13 +79,19 @@ void lcd_send(char data, enum RegisterSelect reg){
 };
 
 void LCD_Initialise(void){
+
+	// Convert ms delay to ticks
+//	const TickType_t tickDelay;
 	// Set the READ/WRITE SELECTION to be REGISTER WRITE (R/W=0)
 	HAL_GPIO_WritePin(RW_PORT, RW_PIN, 0);
 	// 4-bit Initialisation Sequence ~~~~~~~~~~~~~~~~~~~~~~~~
 	// Power ON
-	HAL_Delay(50); // Need a delay > 15ms
+//	tickDelay = pdMS_TO_TICKS(50);
+	vTaskDelay(pdMS_TO_TICKS(50));
+//	HAL_Delay(50); // Need a delay > 15ms
 	LCD_SendCommand(0x30); // FUNCTION SET
-	HAL_Delay(5); // Need a delay > 4.1ms
+	vTaskDelay(pdMS_TO_TICKS(5));
+//	HAL_Delay(5); // Need a delay > 4.1ms
 	LCD_SendCommand(0x30); // FUNCTION SET
 	HAL_Delay(1); // Need a delay > 100us
 	LCD_SendCommand(0x30); // FUNCTION SET

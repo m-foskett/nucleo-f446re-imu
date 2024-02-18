@@ -85,14 +85,26 @@ xQueueHandle St_Queue_Handler;
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 xTaskHandle IMU_Measure_Task_Handler;
 xTaskHandle LCD_Display_Task_Handler;
-xTaskHandle UART_Display_Task_Handler;
+xTaskHandle Initialisation_Task_Handler;
+//xTaskHandle UART_Display_Task_Handler;
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Task Functions
 //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 void IMU_Measure_Task(void *argument);
 void LCD_Display_Task(void *argument);
-void UART_Display_Task(void *argument);
+void Initialisation_Task(void *argument);
+//void UART_Display_Task(void *argument);
 
+// malloc and free wrappers to avoid issues with sprintf
+void *malloc( size_t xBytes )
+{
+     return pvPortMalloc( xBytes );
+}
+
+void free( void *pvBuffer )
+{
+     vPortFree( pvBuffer );
+}
 /* USER CODE END 0 */
 
 /**
@@ -102,7 +114,6 @@ void UART_Display_Task(void *argument);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	uint8_t buf[70]; // Serial Buffer
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -130,117 +141,31 @@ int main(void)
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // FreeRTOS Setup BEGIN
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-  // Create Queue
-  St_Queue_Handler = xQueueCreate(2, sizeof(MPU6050_Values));
-  // Error Handling for queue creation
-  if(St_Queue_Handler == 0){
-	  char *str = "Structured Queue creation failed!\n\n";
+	// Create Queue
+	St_Queue_Handler = xQueueCreate(2, sizeof(MPU6050_Values));
+	// Error Handling for queue creation
+	if(St_Queue_Handler == 0){
+	  char *str = "Structured Queue creation failed!\n";
 	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
-  } else {
-	  char *str = "Structured Queue creation successful!\n\n";
+	} else {
+	  char *str = "Structured Queue creation successful!\n";
 	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
-  }
-
-  // Create Tasks
-  // BaseType_t xTaskCreate(
-  	  //  TaskFunction_t pvTaskCode, - Pointer to the task entry function
-  	  //  const char * const pcName, - Descriptive name for the task
-  	  //  const configSTACK_DEPTH_TYPE uxStackDepth, - Stack depth in words to allocate for use as task's stack
-  	  //  void *pvParameters, - value passed as parameter to the created task
-  	  //  UBaseType_t uxPriority, - priority at which the created task will execute
-  	  //  TaskHandle_t *pxCreatedTask - used to pass a handle to the created task, optional and can be NULL
-  //);
-  BaseType_t xReturnValue; // Return value for task creation
-  // IMU_Measure_Task Creation
-  xReturnValue = xTaskCreate(IMU_Measure_Task, "IMU_Measure", 128, NULL, 2, &IMU_Measure_Task_Handler);
-  if(xReturnValue == pdPASS){
-	  char *str = "IMU_Measure task was successfully created!\n\n";
+	}
+	// Initialisation Task
+	BaseType_t xReturnValue; // Return value for task creation
+	// Initialisation_Task Creation
+	xReturnValue = xTaskCreate(Initialisation_Task, "Initialisation", 128, NULL, 2, &Initialisation_Task_Handler);
+	if(xReturnValue == pdPASS){
+	  char *str = "Initialisation task was successfully created!\n";
 	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
-  } else {
-	  char *str = "Failed to create IMU_Measure task!\n\n";
+	} else {
+	  char *str = "Failed to create Initialisation Task!\n";
 	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
-  }
-  // LCD_Display_Task Creation
-  xReturnValue = xTaskCreate(LCD_Display_Task, "LCD_Display", 128, NULL, 2, &LCD_Display_Task_Handler);
-  if(xReturnValue == pdPASS){
-	  char *str = "LCD_Display task was successfully created!\n\n";
-	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
-  } else {
-	  char *str = "Failed to create LCD_Display task!\n\n";
-	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
-  }
-  // UART_Display_Task Creation
-  xReturnValue = xTaskCreate(UART_Display_Task, "UART_Display", 128, NULL, 2, &UART_Display_Task_Handler);
-  if(xReturnValue == pdPASS){
-	  char *str = "UART_Display task was successfully created!\n\n";
-	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
-  } else {
-	  char *str = "Failed to create UART_Display task!\n\n";
-	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
-  }
-
-  // Scheduler Start
-  vTaskStartScheduler();
-
+	}
+	// Scheduler Start
+	vTaskStartScheduler();
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   // FreeRTOS Setup END
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // LCD Setup BEGIN
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // Start Timer 1 before initialising the LCD1602 module
-  HAL_TIM_Base_Start(&htim1);
-  // Initialise the LCD1602 module
-  LCD_Initialise();
-  // Place the Cursor at (0,0)
-  LCD_PlaceCursor(0, 0);
-  // Display a message to show that the LCD1602 module has been initialised
-  LCD_SendString("LCD Initialised");
-  HAL_Delay(3000);
-  LCD_Clear();
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // LCD Setup END
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // MPU6050 Setup BEGIN
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // Initialise the MPU6050 IMU
-  MPU6050_Initialisation_Status status = MPU6050_Init();
-  // Error Handling
-  switch(status){
-  	  case INIT_SUCCESS:
-  		  LCD_SendString("MPU6050 Ready!");
-  		  HAL_Delay(3000);
-  		  LCD_Clear();
-  		  strcpy((char*)buf, "Successful Initialisation of MPU6050!\r\n");
-  		  break;
-  	  case WRONG_DEVICE:
-  		  strcpy((char*)buf, "Wrong device found!\r\n");
-  		  break;
-  	  case DEVICE_NOT_FOUND:
-  		  strcpy((char*)buf, "Error finding device!\r\n");
-  		  break;
-  	  case DEVICE_ASLEEP:
-  		  strcpy((char*)buf, "Error waking up the device!\r\n");
-  		  break;
-  	  case ERROR_SMPLRT_DIV:
-  		  strcpy((char*)buf, "Error setting the Sample Rate Divider!\r\n");
-  		  break;
-  	  case ERROR_GYRO_CONFIG:
-  		  strcpy((char*)buf, "Error configuring the gyroscope full scale range!\r\n");
-  		  break;
-  	  case ERROR_ACC_CONFIG:
-  		  strcpy((char*)buf, "Error configuring the accelerometer full scale range!\r\n");
-  		  break;
-  	  default:
-  		  strcpy((char*)buf, "Unknown error case!\r\n");
-  		  break;
-  };
-  // Transmit the status of the MPU6050 initialisation
-  HAL_UART_Transmit(&huart2, buf, strlen((char*)buf), HAL_MAX_DELAY);
-  // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // MPU6050 Setup END
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   /* USER CODE END 2 */
 
@@ -487,6 +412,14 @@ void IMU_Measure_Task (void *argument){
 	// Convert ms delay to ticks
 	const TickType_t tickDelay = pdMS_TO_TICKS(1000);
 
+	// Char pointer for string to write to UART
+//	char *str;
+
+	// Allocate memory in the 'Portable Layer' of the FreeRTOS
+	//	- Returns a pointer of type void which can be cast into a pointer of any form
+	//	- NB: Memory must be allocated like this otherwise sprintf will cause a hard fault error
+//	str = pvPortMalloc(sizeof(char) * 50);
+
 	/* Infinite loop */
 	for(;;)
 	{
@@ -502,65 +435,214 @@ void IMU_Measure_Task (void *argument){
 		//				TickType_t xTicksToWait - max amount of time the task should block waiting for available space on the queue
 		//		);
 		BaseType_t xReturnValue; // Return value for queue send
-		xReturnValue = xQueueSend(St_Queue_Handler, &sensorValues, portMAX_DELAY);
+		xReturnValue = xQueueSend(St_Queue_Handler, &sensorValues, pdMS_TO_TICKS(1000));
 
 		if(xReturnValue == pdTRUE){
-		  char *str = "Successfully posted sensor data to the queue!\n\n";
+		  char *str = "Successfully posted sensor data to the queue!\n";
 		  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
 		} else {
-		  char *str = "Failed to post sensor data to the queue!\n\n";
+		  char *str = "Failed to post sensor data to the queue!\n";
 		  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
 		}
 
-		vTaskDelay(tickDelay); // 1 second delay in ticks
+		// Freeing memory
+//		vPortFree(str); // UART string
 
+		vTaskDelay(tickDelay); // 1 second delay in ticks
 	}
 	// Fallback cleanup of thread in case forever loop was exited accidentally
 	vTaskDelete(IMU_Measure_Task_Handler);
 }
+
+void LCD_Display_Task (void *argument){
+	// Pointer to the sensor values struct to receive the queue data
+	MPU6050_Values *rcv_sensorValues;
+	// Convert ms delay to ticks
+	const TickType_t tickDelay = pdMS_TO_TICKS(1000);
+	// Char pointer for string to write to lcd
+	char *dataString;
+
+	// Char pointer for string to write to UART
+//	char *str;
+
+	/* Infinite loop */
+	for(;;)
+	{
+		// Allocate memory in the 'Portable Layer' of the FreeRTOS
+		//	- Returns a pointer of type void which can be cast into a pointer of any form
+		//	- NB: Memory must be allocated like this otherwise sprintf will cause a hard fault error
+//		str = pvPortMalloc(sizeof(char) * 50);
+		// Receive the sensor data from the queue, received by copy so a buffer of adequate size must be provided
+		//		BaseType_t xQueueReceive(
+		//				QueueHandle_t xQueue, - handle to the queue
+		//				void *pvBuffer, - pointer to the buffer to store the received item
+		//				TickType_t xTicksToWait - max amount of time the task should block waiting for an item to receive
+		//										  in the case of an empty queue
+		//		);
+		BaseType_t xReturnValue; // Return value for queue send
+		xReturnValue = xQueueReceive(St_Queue_Handler, &rcv_sensorValues, pdMS_TO_TICKS(1000));
+
+		if(xReturnValue == pdTRUE){
+			char *str = "Successfully received sensor data from the queue!\n\n";
+			HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+
+			// Allocate memory in the 'Portable Layer' of the FreeRTOS
+			//	- Returns a pointer of type void which can be cast into a pointer of any form
+			//	- NB: Memory must be allocated like this otherwise sprintf will cause a hard fault error
+			dataString = pvPortMalloc(sizeof(char) * 30);
+
+			// Display the MPU6050 accelerometer readings on the LCD1602 module
+			sprintf(dataString, "Ax%.2f Ay%.2f", rcv_sensorValues->accel_x, rcv_sensorValues->accel_y);
+			HAL_UART_Transmit(&huart2, (uint8_t *)dataString, strlen(dataString), HAL_MAX_DELAY);
+			LCD_SendString(dataString);
+			LCD_PlaceCursor(1, 5);
+			sprintf(dataString, "Az%.2f", rcv_sensorValues->accel_z);
+			HAL_UART_Transmit(&huart2, (uint8_t *)dataString, strlen(dataString), HAL_MAX_DELAY);
+			LCD_SendString(dataString);
+			vTaskDelay(tickDelay); // 1 second delay in ticks to be able to see the data before clearing and writing new data
+			LCD_Clear();
+			// Display the MPU6050 gyroscope readings on the LCD1602 module
+			sprintf(dataString, "Gx%.2f Gy%.2f", rcv_sensorValues->gyro_x, rcv_sensorValues->gyro_y);
+			HAL_UART_Transmit(&huart2, (uint8_t *)dataString, strlen(dataString), HAL_MAX_DELAY);
+			LCD_SendString(dataString);
+			LCD_PlaceCursor(1, 5);
+			sprintf(dataString, "Gz%.2f", rcv_sensorValues->gyro_z);
+			HAL_UART_Transmit(&huart2, (uint8_t *)dataString, strlen(dataString), HAL_MAX_DELAY);
+			LCD_SendString(dataString);
+			vTaskDelay(tickDelay); // 1 second delay in ticks to be able to see the data before clearing and writing new data
+			LCD_Clear();
+		} else {
+		  char *str = "Failed to receive sensor data from the queue!\n\n";
+		  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+		}
+		// Freeing memory
+		vPortFree(rcv_sensorValues); // The sensor data struct pointer received from the queue
+		// Freeing memory
+		vPortFree(dataString); // Data string
+		// Freeing memory
+//		vPortFree(str); // UART string
+	}
+	// Fallback cleanup of thread in case forever loop was exited accidentally
+	vTaskDelete(LCD_Display_Task_Handler);
+}
+
+void Initialisation_Task (void *argument){
+	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// LCD Setup BEGIN
+	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Start Timer 1 before initialising the LCD1602 module
+	HAL_TIM_Base_Start(&htim1);
+	// Initialise the LCD1602 module
+	LCD_Initialise();
+	// Char pointer for string to write to UART
+	char *str;
+
+	// Allocate memory in the 'Portable Layer' of the FreeRTOS
+	//	- Returns a pointer of type void which can be cast into a pointer of any form
+	//	- NB: Memory must be allocated like this otherwise sprintf will cause a hard fault error
+	str = pvPortMalloc(sizeof(char) * 50);
+
+	HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+	// Place the Cursor at (0,0)
+	LCD_PlaceCursor(0, 0);
+	// Display a message to show that the LCD1602 module has been initialised
+	LCD_SendString("LCD Initialised");
+	//  HAL_Delay(3000);
+	// Convert ms delay to ticks
+	const TickType_t tickDelay = pdMS_TO_TICKS(3000);
+	vTaskDelay(tickDelay);
+	LCD_Clear();
+	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// LCD Setup END
+	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// MPU6050 Setup BEGIN
+	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Initialise the MPU6050 IMU
+	MPU6050_Initialisation_Status status = MPU6050_Init();
+	// Error Handling
+	switch(status){
+	  case INIT_SUCCESS:
+		  LCD_SendString("MPU6050 Ready!");
+		  vTaskDelay(pdMS_TO_TICKS(3000));
+		  LCD_Clear();
+		  strcpy(str, "Successful Initialisation of MPU6050!\n");
+		  break;
+	  case WRONG_DEVICE:
+		  strcpy(str, "Wrong device found!\n");
+		  break;
+	  case DEVICE_NOT_FOUND:
+		  strcpy(str, "Error finding device!\n");
+		  break;
+	  case DEVICE_ASLEEP:
+		  strcpy(str, "Error waking up the device!\n");
+		  break;
+	  case ERROR_SMPLRT_DIV:
+		  strcpy(str, "Error setting the Sample Rate Divider!\n");
+		  break;
+	  case ERROR_GYRO_CONFIG:
+		  strcpy(str, "Error configuring the gyroscope full scale range!\n");
+		  break;
+	  case ERROR_ACC_CONFIG:
+		  strcpy(str, "Error configuring the accelerometer full scale range!\n");
+		  break;
+	  default:
+		  strcpy(str, "Unknown error case!\n");
+		  break;
+	};
+	// Transmit the status of the MPU6050 initialisation
+	HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// MPU6050 Setup END
+	// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// Create Tasks
+	// BaseType_t xTaskCreate(
+	  //  TaskFunction_t pvTaskCode, - Pointer to the task entry function
+	  //  const char * const pcName, - Descriptive name for the task
+	  //  const configSTACK_DEPTH_TYPE uxStackDepth, - Stack depth in words to allocate for use as task's stack
+	  //  void *pvParameters, - value passed as parameter to the created task
+	  //  UBaseType_t uxPriority, - priority at which the created task will execute
+	  //  TaskHandle_t *pxCreatedTask - used to pass a handle to the created task, optional and can be NULL
+	//);
+	BaseType_t xReturnValue; // Return value for task creation
+	// IMU_Measure_Task Creation
+	xReturnValue = xTaskCreate(IMU_Measure_Task, "IMU_Measure", 128, NULL, 2, &IMU_Measure_Task_Handler);
+	if(xReturnValue == pdPASS){
+		strcpy(str, "IMU_Measure task was successfully created!\n");
+		HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+	} else {
+		strcpy(str, "Failed to create IMU_Measure task!\n");
+		HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+	}
+	// LCD_Display_Task Creation
+	xReturnValue = xTaskCreate(LCD_Display_Task, "LCD_Display", 128, NULL, 2, &LCD_Display_Task_Handler);
+	if(xReturnValue == pdPASS){
+		strcpy(str, "LCD_Display task was successfully created!\n");
+		HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+	} else {
+		strcpy(str, "Failed to create LCD_Display task!\n");
+		HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+	}
+	// UART_Display_Task Creation
+	//  xReturnValue = xTaskCreate(UART_Display_Task, "UART_Display", 128, NULL, 2, &UART_Display_Task_Handler);
+	//  if(xReturnValue == pdPASS){
+	//	  char *str = "UART_Display task was successfully created!\n\n";
+	//	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+	//  } else {
+	//	  char *str = "Failed to create UART_Display task!\n\n";
+	//	  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+	//  }
+	// Freeing memory
+	vPortFree(str); // UART string
+
+	// Delete initialisation task as it is no longer needed
+	vTaskDelete(Initialisation_Task_Handler);
+}
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-// FreeRTOS Task Definitions BEGIN
+// FreeRTOS Task Definitions END
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 /* USER CODE END 4 */
-
-/* USER CODE BEGIN Header_startLCDTask */
-/**
-  * @brief  Function implementing the lcdTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_startLCDTask */
-//void startLCDTask(void const * argument)
-//{
-//  /* USER CODE BEGIN 5 */
-//  /* Infinite loop */
-//  for(;;)
-//  {
-//	  // Display the MPU6050 accelerometer readings on the LCD1602 module
-//		sprintf((char*)buf, "Ax%.2f Ay%.2f",
-//				sensorValues.accel_x, sensorValues.accel_y);
-//		LCD_SendString((char*)buf);
-//		LCD_PlaceCursor(1, 5);
-//		sprintf((char*)buf, "Az%.2f", sensorValues.accel_z);
-//		LCD_SendString((char*)buf);
-////		HAL_Delay(1000); // 1 sample/second
-//		osDelay(1000);
-//		LCD_Clear();
-//		// Display the MPU6050 gyroscope readings on the LCD1602 module
-//		sprintf((char*)buf, "Gx%.2f Gy%.2f",
-//				sensorValues.gyro_x, sensorValues.gyro_y);
-//		LCD_SendString((char*)buf);
-//		LCD_PlaceCursor(1, 5);
-//		sprintf((char*)buf, "Gz%.2f", sensorValues.gyro_z);
-//		LCD_SendString((char*)buf);
-////		HAL_Delay(1000); // 1 sample/second, need to add CMSIS-RTOS to display and read at the same time via multi-threading
-//		osDelay(1000);
-//		LCD_Clear();
-//  }
-//  // Fallback cleanup of thread in case forever loop was exited accidentally
-//  osThreadTerminate(NULL);
-//  /* USER CODE END 5 */
-//}
+/* USER CODE BEGIN 5 */
 ///* USER CODE BEGIN Header_startUARTTask */
 ///**
 //* @brief Function implementing the uartTask thread.
@@ -584,7 +666,7 @@ void IMU_Measure_Task (void *argument){
 //  osThreadTerminate(NULL);
 //  /* USER CODE END startUARTTask */
 //}
-
+/* USER CODE END 5 */
 /**
   * @brief  Period elapsed callback in non blocking mode
   * @note   This function is called  when TIM6 interrupt took place, inside

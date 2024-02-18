@@ -8,6 +8,13 @@
 #ifndef INC_LCD1602_H_
 #define INC_LCD1602_H_
 
+#include "FreeRTOS.h"
+#include "task.h"
+#include "timers.h"
+#include "queue.h"
+#include "semphr.h"
+#include "event_groups.h"
+
 // Function: void LCD_Initialise(void)
 // Parameters:
 //	- void
