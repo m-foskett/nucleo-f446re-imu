@@ -6,6 +6,31 @@
  */
 
 #include <MPU6050.h>
+#include "stm32f4xx_hal.h"
+
+// Address of the MPU-6050 IMU
+// 	- Needs to be left shifted by 1 as it is a 7-bit address
+static const uint8_t IMU_ADDR = 0x68 << 1;
+// PWR_MGMT_1 Register
+static const uint8_t REG_PWR_MGMT_1 = 0x6B;
+// WHO_AM_I register for the MPU6050
+static const uint8_t REG_WHO_AM_I = 0x75;
+// Sample Rate Divider Register
+static const uint8_t REG_SMPRT_DIV = 0x19;
+// Gyroscope Configuration Register
+static const uint8_t REG_GYRO_CONFIG = 0x1B;
+// Accelerometer Configuration Register
+static const uint8_t REG_ACCEL_CONFIG = 0x1C;
+// Accelerometer Measurement Register
+static const uint8_t REG_ACCEL_XOUT_H = 0x3B;
+// Gyroscope Measurement Register
+static const uint8_t REG_GYRO_XOUT_H = 0x43;
+
+// I2C Handler ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#define I2C hi2c1
+//
+//// Extern declaration of I2C
+extern I2C_HandleTypeDef I2C;
 
 MPU6050_Initialisation_Status MPU6050_Init(void){
 	uint8_t who;
@@ -14,7 +39,7 @@ MPU6050_Initialisation_Status MPU6050_Init(void){
 
 	// Check if the MPU-6050 sensor is working by reading the WHO_AM_I register (0x75)
 	//	- Expected Result: 0x68 (104)
-	ret = HAL_I2C_Mem_Read(&hi2c1, IMU_ADDR, REG_WHO_AM_I, 1, &who, 1, HAL_MAX_DELAY);
+	ret = HAL_I2C_Mem_Read(&I2C, IMU_ADDR, REG_WHO_AM_I, 1, &who, 1, HAL_MAX_DELAY);
 	if(ret != HAL_OK){
 		return DEVICE_NOT_FOUND;
 	}
