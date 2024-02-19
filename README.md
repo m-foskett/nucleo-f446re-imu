@@ -2,7 +2,7 @@
 
 Measuring IMU sensor values from an MPU6050 and displaying them on an LCD1602 module.
 
-Running on an STM32 Nucleo-64 development board (F446RE).
+Running FreeRTOS to schedule multiple tasks (measure and display) on an STM32 Nucleo-64 development board (F446RE).
 
 Wrote my own library functions to initialise and utilise the devices using the respective register sheets as reference.
 
@@ -25,6 +25,6 @@ Wrote my own library functions to initialise and utilise the devices using the r
 Below is a non-exhaustive list of the technologies utilised within this project.
 | Devices | Languages | Libraries |
 | ----------- | ----------- | ----------- |
-| MPU6050 IMU Device | Embedded C |  |
+| MPU6050 IMU Device | Embedded C | FreeRTOS |
 | LCD1602 Module |  | |
 | STM32 Nucleo-64 F446RE | | |
