@@ -412,14 +412,6 @@ void IMU_Measure_Task (void *argument){
 	// Convert ms delay to ticks
 	const TickType_t tickDelay = pdMS_TO_TICKS(1000);
 
-	// Char pointer for string to write to UART
-//	char *str;
-
-	// Allocate memory in the 'Portable Layer' of the FreeRTOS
-	//	- Returns a pointer of type void which can be cast into a pointer of any form
-	//	- NB: Memory must be allocated like this otherwise sprintf will cause a hard fault error
-//	str = pvPortMalloc(sizeof(char) * 50);
-
 	/* Infinite loop */
 	for(;;)
 	{
@@ -435,7 +427,7 @@ void IMU_Measure_Task (void *argument){
 		//				TickType_t xTicksToWait - max amount of time the task should block waiting for available space on the queue
 		//		);
 		BaseType_t xReturnValue; // Return value for queue send
-		xReturnValue = xQueueSend(St_Queue_Handler, &sensorValues, pdMS_TO_TICKS(1000));
+		xReturnValue = xQueueSend(St_Queue_Handler, &sensorValues, pdMS_TO_TICKS(2000));
 
 		if(xReturnValue == pdTRUE){
 		  char *str = "Successfully posted sensor data to the queue!\n";
@@ -443,6 +435,8 @@ void IMU_Measure_Task (void *argument){
 		} else {
 		  char *str = "Failed to post sensor data to the queue!\n";
 		  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+
+		  vPortFree(sensorValues); // free the memory that failed to be added to the queue
 		}
 
 		// Freeing memory
@@ -489,7 +483,7 @@ void LCD_Display_Task (void *argument){
 			// Allocate memory in the 'Portable Layer' of the FreeRTOS
 			//	- Returns a pointer of type void which can be cast into a pointer of any form
 			//	- NB: Memory must be allocated like this otherwise sprintf will cause a hard fault error
-			dataString = pvPortMalloc(sizeof(char) * 30);
+			dataString = pvPortMalloc(sizeof(char) * 15);
 
 			// Display the MPU6050 accelerometer readings on the LCD1602 module
 			sprintf(dataString, "Ax%.2f Ay%.2f", rcv_sensorValues->accel_x, rcv_sensorValues->accel_y);
@@ -606,7 +600,7 @@ void Initialisation_Task (void *argument){
 	//);
 	BaseType_t xReturnValue; // Return value for task creation
 	// IMU_Measure_Task Creation
-	xReturnValue = xTaskCreate(IMU_Measure_Task, "IMU_Measure", 128, NULL, 2, &IMU_Measure_Task_Handler);
+	xReturnValue = xTaskCreate(IMU_Measure_Task, "IMU_Measure", 256, NULL, 2, &IMU_Measure_Task_Handler);
 	if(xReturnValue == pdPASS){
 		strcpy(str, "IMU_Measure task was successfully created!\n");
 		HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
@@ -615,7 +609,7 @@ void Initialisation_Task (void *argument){
 		HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
 	}
 	// LCD_Display_Task Creation
-	xReturnValue = xTaskCreate(LCD_Display_Task, "LCD_Display", 128, NULL, 2, &LCD_Display_Task_Handler);
+	xReturnValue = xTaskCreate(LCD_Display_Task, "LCD_Display", 256, NULL, 3, &LCD_Display_Task_Handler);
 	if(xReturnValue == pdPASS){
 		strcpy(str, "LCD_Display task was successfully created!\n");
 		HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
