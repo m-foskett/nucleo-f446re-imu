@@ -411,10 +411,16 @@ void IMU_Measure_Task (void *argument){
 
 	// Convert ms delay to ticks
 	const TickType_t tickDelay = pdMS_TO_TICKS(1000);
+	char *str;
 
 	/* Infinite loop */
 	for(;;)
 	{
+		// Returns the remaining stack space (in words) that available to the task since task execution
+		// 	- Therefore multiply by 4 for a 32-bit machine to get bytes
+		UBaseType_t stackHighWaterMark;
+		stackHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
+
 		// Allocate memory in the 'Portable Layer' of the FreeRTOS
 		//	- Returns a pointer of type void which can be cast into a pointer of any form
 		sensorValues = pvPortMalloc(sizeof(MPU6050_Values));
@@ -430,18 +436,14 @@ void IMU_Measure_Task (void *argument){
 		xReturnValue = xQueueSend(St_Queue_Handler, &sensorValues, pdMS_TO_TICKS(2000));
 
 		if(xReturnValue == pdTRUE){
-		  char *str = "Successfully posted sensor data to the queue!\n";
+		  str = "Queue Post!\r\n";
 		  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
 		} else {
-		  char *str = "Failed to post sensor data to the queue!\n";
+		  str = "Failed to post!\r\n";
 		  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
 
 		  vPortFree(sensorValues); // free the memory that failed to be added to the queue
 		}
-
-		// Freeing memory
-//		vPortFree(str); // UART string
-
 		vTaskDelay(tickDelay); // 1 second delay in ticks
 	}
 	// Fallback cleanup of thread in case forever loop was exited accidentally
@@ -477,7 +479,7 @@ void LCD_Display_Task (void *argument){
 		xReturnValue = xQueueReceive(St_Queue_Handler, &rcv_sensorValues, pdMS_TO_TICKS(1000));
 
 		if(xReturnValue == pdTRUE){
-			char *str = "Successfully received sensor data from the queue!\n\n";
+			char *str = "Successfully received sensor data from the queue!\r\n";
 			HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
 
 			// Allocate memory in the 'Portable Layer' of the FreeRTOS
@@ -506,7 +508,7 @@ void LCD_Display_Task (void *argument){
 			vTaskDelay(tickDelay); // 1 second delay in ticks to be able to see the data before clearing and writing new data
 			LCD_Clear();
 		} else {
-		  char *str = "Failed to receive sensor data from the queue!\n\n";
+		  char *str = "Failed to receive sensor data from the queue!\r\n";
 		  HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
 		}
 		// Freeing memory
@@ -600,7 +602,7 @@ void Initialisation_Task (void *argument){
 	//);
 	BaseType_t xReturnValue; // Return value for task creation
 	// IMU_Measure_Task Creation
-	xReturnValue = xTaskCreate(IMU_Measure_Task, "IMU_Measure", 256, NULL, 2, &IMU_Measure_Task_Handler);
+	xReturnValue = xTaskCreate(IMU_Measure_Task, "IMU_Measure", 300, NULL, 2, &IMU_Measure_Task_Handler);
 	if(xReturnValue == pdPASS){
 		strcpy(str, "IMU_Measure task was successfully created!\n");
 		HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
@@ -609,7 +611,7 @@ void Initialisation_Task (void *argument){
 		HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
 	}
 	// LCD_Display_Task Creation
-	xReturnValue = xTaskCreate(LCD_Display_Task, "LCD_Display", 256, NULL, 3, &LCD_Display_Task_Handler);
+	xReturnValue = xTaskCreate(LCD_Display_Task, "LCD_Display", 300, NULL, 3, &LCD_Display_Task_Handler);
 	if(xReturnValue == pdPASS){
 		strcpy(str, "LCD_Display task was successfully created!\n");
 		HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
