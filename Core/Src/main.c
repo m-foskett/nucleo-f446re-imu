@@ -421,6 +421,10 @@ void IMU_Measure_Task (void *argument){
 		UBaseType_t stackHighWaterMark;
 		stackHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
 
+		// Check how much free heap memory there is (in bytes) before allocating more space
+		size_t freeHeap;
+		freeHeap = xPortGetFreeHeapSize();
+
 		// Allocate memory in the 'Portable Layer' of the FreeRTOS
 		//	- Returns a pointer of type void which can be cast into a pointer of any form
 		sensorValues = pvPortMalloc(sizeof(MPU6050_Values));
