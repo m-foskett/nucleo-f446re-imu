@@ -428,6 +428,12 @@ void IMU_Measure_Task (void *argument){
 		// Allocate memory in the 'Portable Layer' of the FreeRTOS
 		//	- Returns a pointer of type void which can be cast into a pointer of any form
 		sensorValues = pvPortMalloc(sizeof(MPU6050_Values));
+
+		// Prevent heap overflow by checking the output of pvPortMalloc
+		if(sensorValues == NULL){
+			str = "Out of Heap Space!";
+			HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
+		}
 		// Get the sensor values from the MPU6050 module
 		MPU6050_Read_Sensor_Values(sensorValues);
 		// Post the sensor data to the queue. The item is queued by copy, not by reference
